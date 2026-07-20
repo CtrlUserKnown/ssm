@@ -676,10 +676,15 @@ fn render_session_rows(f: &mut Frame, area: Rect, app: &SsmApp, _highlight: Opti
         return;
     }
 
+    // Fixed width reserved for the latency sparkline (matches probe HISTORY_CAP),
+    // so the animation always has room and the TAGS column stays aligned.
+    const SPARK_W: usize = 12;
+
     // Column header. The leading two spaces cover the cursor + status glyph.
     let hdr = format!(
-        "    {:<20} {:<24} {:<6} {:<6} {}",
-        "NAME", "HOST", "PORT", "PING", "TAGS"
+        "    {:<20} {:<24} {:<6} {:<6} {:<sw$} {}",
+        "NAME", "HOST", "PORT", "PING", "", "TAGS",
+        sw = SPARK_W
     );
     f.render_widget(
         Paragraph::new(Line::from(Span::styled(hdr, style_dim()))),
@@ -744,25 +749,29 @@ fn render_session_rows(f: &mut Frame, area: Rect, app: &SsmApp, _highlight: Opti
             format!("{:<6}", probe_label(app, s)),
             style_dim(),
         ));
-        // Latency-history sparkline, colored by the latest sample.
+        // Latency-history sparkline in a fixed-width column so the TAGS column
+        // stays put whether or not a sparkline has been collected yet.
+        let mut spark = String::new();
+        let mut spark_color = ratatui::style::Color::DarkGray;
         if app.probe_enabled {
             if let Some(state) = app.probes.get(&probe::key(&s.host, s.port)) {
-                let spark = state.sparkline();
-                if !spark.is_empty() {
-                    let color = state
+                let sl = state.sparkline();
+                if !sl.is_empty() {
+                    spark_color = state
                         .last
                         .map(probe::latency_color)
                         .unwrap_or(ratatui::style::Color::DarkGray);
-                    spans.push(Span::styled(
-                        format!("{spark} "),
-                        Style::default().fg(color),
-                    ));
+                    spark = sl;
                 }
             }
         }
+        spans.push(Span::styled(
+            format!(" {spark:<sw$} ", sw = SPARK_W),
+            Style::default().fg(spark_color),
+        ));
         // Tags as dim chips.
         if !s.tags.is_empty() {
-            spans.push(Span::styled(format!("  {}", s.tags.join(" ")), style_dim()));
+            spans.push(Span::styled(s.tags.join(" "), style_dim()));
         }
 
         f.render_widget(
