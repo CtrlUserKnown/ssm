@@ -54,12 +54,13 @@
 
           <h2>What ssm does</h2>
           <p>ssm provides a rich terminal interface for managing SSH sessions. You can add, edit, and delete sessions through a form-based TUI. Each session stores a name, host, user, port, optional ProxyJump, tags, and optionally a password.</p>
+          <p>ssm supports two connection modes: plain SSH and herdr. For plain SSH, it passes the session config to ssh with StrictHostKeyChecking=accept-new so first-time connections work but changed host keys still abort. For herdr, it shells out to system ssh so the same SSH_ASKPASS mechanism supplies the password in both modes.</p>
           <p>The password is the key part. Instead of storing it in a file, ssm puts it in your OS keychain. When you connect to a host that has a stored password, ssm acts as an SSH_ASKPASS helper, serving the password to ssh through a one-time-nonce Unix socket. The password never appears on the command line, in an environment variable, or on disk.</p>
 
           <h2>Security model</h2>
           <p>ssm takes a security-first approach to credential handling. Passwords live in the OS keychain (macOS Keychain or Linux Secret Service via the keyring crate). At connect time, ssm creates a temporary Unix domain socket with 0600 permissions and a random nonce. It tells ssh to use itself as the SSH_ASKPASS helper. The ssh process re-execs ssm, which connects to the socket, presents the nonce, and receives the password. This is serve-once: if auth fails, the helper returns empty instead of looping.</p>
           <p>ssm only answers password prompts. It refuses key passphrase prompts and host key confirmation prompts. Unknown host keys are never auto-accepted; StrictHostKeyChecking is set to accept-new (first connection only).</p>
-          <p>There is also an optional biometric gate. When enabled, ssm checks for fingerprint presence via fprintd on Linux before releasing a stored password. On macOS, the Touch ID integration is planned.</p>
+          <p>There is also an optional biometric gate. When enabled, ssm checks for fingerprint presence via fprintd-verify on Linux before releasing a stored password. On macOS, Touch ID requires a stably code-signed binary and is not wired up yet; enabling it falls back to a plain keychain read with a warning.</p>
 
           <h2>Import and organization</h2>
           <p>ssm can import sessions directly from your ~/.ssh/config file. It reads concrete Host blocks (skipping wildcards like Host *) and carries over HostName, Port, User, and ProxyJump directives. Sessions are stored as JSON at ~/.config/ssm/sessions.json, but passwords are excluded from this file entirely.</p>

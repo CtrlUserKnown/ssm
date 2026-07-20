@@ -129,18 +129,21 @@ cargo install ssm
                 </tr>
               </thead>
               <tbody>
-                <tr><td><code>j</code> / <code>k</code></td><td>Move down / up</td></tr>
-                <tr><td><code>gg</code> / <code>G</code></td><td>Go to top / bottom</td></tr>
-                <tr><td><code>Ctrl-d</code> / <code>Ctrl-u</code></td><td>Half page down / up</td></tr>
-                <tr><td><code>Enter</code></td><td>Connect to session</td></tr>
+                <tr><td><code>j</code> / <code>k</code></td><td>Move down / up (supports numeric prefixes, e.g. <code>5j</code>)</td></tr>
+                <tr><td><code>gg</code> / <code>G</code></td><td>Go to first / last session</td></tr>
+                <tr><td><code>Ctrl-d</code> / <code>Ctrl-u</code></td><td>Half-page scroll down / up</td></tr>
+                <tr><td><code>Ctrl-f</code> / <code>Ctrl-b</code></td><td>Full-page scroll down / up</td></tr>
+                <tr><td><code>Enter</code></td><td>Connect to selected session</td></tr>
                 <tr><td><code>a</code></td><td>Add new session</td></tr>
                 <tr><td><code>e</code></td><td>Edit selected session</td></tr>
-                <tr><td><code>d</code></td><td>Delete selected session</td></tr>
-                <tr><td><code>y</code></td><td>Yank user@host to clipboard</td></tr>
-                <tr><td><code>/</code></td><td>Search</td></tr>
-                <tr><td><code>T</code></td><td>Tag filter</td></tr>
-                <tr><td><code>Space</code></td><td>Actions menu</td></tr>
-                <tr><td><code>?</code></td><td>Help</td></tr>
+                <tr><td><code>D</code></td><td>Delete selected session (prompts for confirmation)</td></tr>
+                <tr><td><code>y</code></td><td>Yank (copy) user@host to clipboard</td></tr>
+                <tr><td><code>/</code></td><td>Search / filter sessions (matches tags too)</td></tr>
+                <tr><td><code>T</code></td><td>Filter by tag (group view); <code>Esc</code> clears the filter</td></tr>
+                <tr><td><code>s</code></td><td>Open settings menu (herdr, probe, biometric, theme)</td></tr>
+                <tr><td><code>u</code></td><td>Reload sessions from disk</td></tr>
+                <tr><td><code>Space</code></td><td>Open which-key menu (delete, yank, tag filter, import, settings)</td></tr>
+                <tr><td><code>?</code></td><td>Toggle help screen</td></tr>
                 <tr><td><code>q</code></td><td>Quit</td></tr>
               </tbody>
             </table>
@@ -157,14 +160,17 @@ cargo install ssm
                 </tr>
               </thead>
               <tbody>
-                <tr><td><code>ssm</code></td><td>Launch the TUI</td></tr>
-                <tr><td><code>ssm -c user@host[:port]</code></td><td>Direct connect</td></tr>
-                <tr><td><code>ssm -l</code> / <code>ssm --list</code></td><td>Print sessions table</td></tr>
-                <tr><td><code>ssm --import [path]</code></td><td>Import from ssh_config</td></tr>
-                <tr><td><code>ssm --version</code></td><td>Show version</td></tr>
-                <tr><td><code>ssm --help</code></td><td>Show help</td></tr>
+                <tr><td><code>ssm</code></td><td>Launch the full-screen TUI</td></tr>
+                <tr><td><code>ssm -c USER@HOST[:PORT]</code></td><td>Connect directly to a host</td></tr>
+                <tr><td><code>ssm -l</code> / <code>ssm --list</code></td><td>Print saved sessions as a table</td></tr>
+                <tr><td><code>ssm --import [PATH]</code></td><td>Import hosts from an ssh_config file (default <code>~/.ssh/config</code>); skips names that already exist</td></tr>
+                <tr><td><code>ssm --version</code></td><td>Print version</td></tr>
+                <tr><td><code>ssm --help</code></td><td>Print help</td></tr>
               </tbody>
             </table>
+            <div class="callout callout--info">
+              <strong>Note:</strong> ssm supports two connection modes: plain SSH and herdr. Set <code>use_herdr = true</code> in <code>config.toml</code> to connect via herdr instead of ssh.
+            </div>
           </section>
 
           <!-- ── Managing sessions ──────────────────────────── -->
@@ -239,15 +245,13 @@ bastion,internal         # multi-hop, comma-separated</code></pre>
           <!-- ── Biometric unlock ───────────────────────────── -->
           <section id="biometric">
             <h2>Biometric unlock</h2>
-            <p>Optional feature, off by default. When enabled, ssm requires biometric verification before releasing a stored password.</p>
+            <p>Optional feature, off by default. Enable via <code>Space</code> &gt; Settings &gt; <code>b</code>, or <code>biometric_unlock = true</code> in <code>config.toml</code>. When on, ssm requires a biometric check before revealing a stored password at connect time. Passwords are loaded lazily (only at connect), so the prompt actually gates access.</p>
             <ul style="list-style: disc; padding-left: 1.25rem;">
-              <li style="margin-bottom: 0.5rem;"><strong>Linux</strong>: Uses <code>fprintd-verify</code> to check fingerprint presence.</li>
-              <li style="margin-bottom: 0.5rem;"><strong>macOS</strong>: Touch ID support (planned).</li>
+              <li style="margin-bottom: 0.5rem;"><strong>Linux</strong>: Uses <code>fprintd-verify</code> &mdash; a fingerprint presence gate in front of the Secret Service release. Not cryptographically bound to the secret.</li>
+              <li style="margin-bottom: 0.5rem;"><strong>macOS</strong>: Touch ID is not wired up yet. A real implementation needs <code>LocalAuthentication</code> and a stably code-signed binary so the Secure Enclave keychain item survives rebuilds. Use <code>scripts/sign-macos.sh</code> with a free self-signed certificate for personal use, or a Developer ID certificate + notarization to distribute. Until it lands, enabling biometric on macOS falls back to a plain keychain read with a warning.</li>
             </ul>
-            <p>Enable in <code>config.toml</code>:</p>
-            <pre><code>biometric = true</code></pre>
             <div class="callout callout--tip">
-              <strong>Tip:</strong> If biometric is enabled but no verifier is available, ssm warns and proceeds normally.
+              <strong>Tip:</strong> If biometric is enabled but no verifier is available, ssm warns and proceeds rather than locking you out of your own hosts.
             </div>
           </section>
 
@@ -255,10 +259,10 @@ bastion,internal         # multi-hop, comma-separated</code></pre>
           <section id="config-file">
             <h2>Config file</h2>
             <p>Location: <code>~/.config/ssm/config.toml</code></p>
-            <pre><code>theme = "noir-cat"
-herdr = false
-probe = true
-biometric = false</code></pre>
+            <pre><code>use_herdr = true
+theme = "noir-cat"
+probe = true             # background reachability probing + latency in the list
+biometric_unlock = false # require a biometric check before revealing a password</code></pre>
             <p>Override the config directory with <code>DOTS_SSM_DIR=/path/to/dir</code>.</p>
           </section>
 
