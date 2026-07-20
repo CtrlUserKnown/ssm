@@ -5,3 +5,6 @@
 ._*
 **/._*
 .DS_Store
+
+# Built binaries
+ssm-universal
