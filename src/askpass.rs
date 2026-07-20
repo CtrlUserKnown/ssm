@@ -84,6 +84,32 @@ fn fetch_secret() -> Result<String> {
     Ok(buf)
 }
 
+/// Choose a directory for the askpass socket whose full path fits within the
+/// kernel's `sockaddr_un.sun_path` limit (104 bytes incl. NUL on macOS, 108 on
+/// Linux). macOS's default `$TMPDIR` (`/var/folders/…`) is long enough that our
+/// socket name overflows it, so we walk candidate directories shortest-fit-wins
+/// and fall back to `/tmp`, which is always short and writable.
+fn pick_socket_path(file: &str) -> PathBuf {
+    // Stay comfortably under the smaller (macOS) limit, leaving room for the NUL.
+    const MAX_LEN: usize = 100;
+
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Some(d) = std::env::var_os("XDG_RUNTIME_DIR") {
+        candidates.push(PathBuf::from(d));
+    }
+    candidates.push(std::env::temp_dir());
+    candidates.push(PathBuf::from("/tmp"));
+
+    for dir in &candidates {
+        let path = dir.join(file);
+        if path.as_os_str().len() <= MAX_LEN {
+            return path;
+        }
+    }
+    // Nothing fit (extreme case); /tmp is the shortest option available.
+    PathBuf::from("/tmp").join(file)
+}
+
 /// A running askpass server: owns the socket, the background accept thread, and
 /// the environment values the child process needs. Dropping it shuts the thread
 /// down and removes the socket file.
@@ -96,13 +122,15 @@ pub struct Server {
 
 impl Server {
     /// Start serving `secret`. The socket lives in `$XDG_RUNTIME_DIR` (falling
-    /// back to a temp dir) with `0600` permissions.
+    /// back to a temp dir, or `/tmp` when that path is too long — see
+    /// [`pick_socket_path`]) with `0600` permissions.
     pub fn start(secret: String) -> Result<Server> {
-        let dir = std::env::var_os("XDG_RUNTIME_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(std::env::temp_dir);
         let nonce = random_hex(16);
-        let sock_path = dir.join(format!("ssm-askpass-{}-{}.sock", std::process::id(), nonce));
+        let sock_path = pick_socket_path(&format!(
+            "ssm-askpass-{}-{}.sock",
+            std::process::id(),
+            nonce
+        ));
 
         // Stale path from a crashed run would block bind(); clear it first.
         let _ = std::fs::remove_file(&sock_path);
