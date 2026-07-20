@@ -4,6 +4,8 @@
   var container = document.getElementById('ssm-tui-demo');
   if (!container) return;
 
+  var VERSION = '1.0.0';
+
   var sessions = [
     { name: 'production', host: 'prod.example.com', user: 'deploy', port: '22', tags: ['prod', 'web'], status: 'green', latency: 23, sparkline: [3,5,4,6,3,5,7,4,3,5,6,4,3,5] },
     { name: 'staging', host: 'staging.example.com', user: 'deploy', port: '2222', tags: ['staging'], status: 'green', latency: 45, sparkline: [5,8,6,10,7,5,8,9,6,5,7,8,6,5] },
@@ -17,18 +19,18 @@
 
   var themeOrder = ['auto', 'noir-cat', 'knew-pines', 'catppuccin', 'gruvbox', 'nord', 'tokyo-night'];
   var themes = {
-    'auto':       { accent: 'var(--blue)', bg: 'var(--bg)' },
-    'noir-cat':   { accent: '#89b4fa', bg: '#1a1a1a' },
-    'knew-pines': { accent: '#c4a7e7', bg: '#191724' },
-    'catppuccin': { accent: '#89b4fa', bg: '#1e1e2e' },
-    'gruvbox':    { accent: '#fabd2f', bg: '#282828' },
-    'nord':       { accent: '#88c0d0', bg: '#2e3440' },
-    'tokyo-night':{ accent: '#7aa2f7', bg: '#1a1b26' }
+    'auto':       { accent: '#89b4fa', bg: '#0e0e0e' },
+    'noir-cat':   { accent: '#89b4fa', bg: '#0e0e0e' },
+    'knew-pines': { accent: '#c4a7e7', bg: '#0e0e0e' },
+    'catppuccin': { accent: '#89b4fa', bg: '#0e0e0e' },
+    'gruvbox':    { accent: '#fabd2f', bg: '#0e0e0e' },
+    'nord':       { accent: '#88c0d0', bg: '#0e0e0e' },
+    'tokyo-night':{ accent: '#7aa2f7', bg: '#0e0e0e' }
   };
 
-  var statusColors = { green: '#a6e3a1', yellow: '#f9e2af', red: '#f38ba8' };
-  var mutedColor = '#6c7086';
-  var tagColor = '#89b4fa';
+  var statusColors = { green: '#a6e3a1', yellow: '#f9e2af', red: '#f38ba8', gray: '#585b70' };
+  var dimColor = '#585b70';
+  var headerColor = '#89b4fa';
 
   var selectedIndex = 0;
   var currentTheme = 0;
@@ -59,16 +61,29 @@
     return themes[themeOrder[currentTheme]].accent;
   }
 
-  function getBgColor() {
-    return themes[themeOrder[currentTheme]].bg;
-  }
-
   function getThemeName() {
     return themeOrder[currentTheme];
   }
 
   function clamp(val, min, max) {
     return Math.max(min, Math.min(max, val));
+  }
+
+  function pad(str, len) {
+    str = String(str);
+    while (str.length < len) str += ' ';
+    return str.substring(0, len);
+  }
+
+  function truncate(str, len) {
+    if (str.length <= len) return str;
+    return str.substring(0, len - 1) + '\u2026';
+  }
+
+  function truncateMiddle(str, len) {
+    if (str.length <= len) return str;
+    var half = Math.floor((len - 1) / 2);
+    return str.substring(0, half) + '\u2026' + str.substring(str.length - half);
   }
 
   function highlightMatch(text, query) {
@@ -94,37 +109,65 @@
     return '<span class="ssm-sparkline">' + bars + '</span>';
   }
 
+  function buildBorderLine(width) {
+    return '\u2500'.repeat(width);
+  }
+
+  function buildHeaderBorder() {
+    var w = 58;
+    var title = ' ssm ';
+    var ver = ' v' + VERSION + ' ';
+    var chars = [];
+    for (var i = 0; i < w; i++) chars.push('\u2500');
+    for (var i = 0; i < title.length; i++) {
+      var pos = 4 + i;
+      if (pos < w) chars[pos] = title[i];
+    }
+    var verStart = w - ver.length - 2;
+    for (var i = 0; i < ver.length; i++) {
+      var pos = verStart + i;
+      if (pos < w) chars[pos] = ver[i];
+    }
+    return chars.join('');
+  }
+
   function renderRow(session, index) {
     var isSelected = index === selectedIndex;
-    var classes = ['ssm-row'];
-    if (isSelected) classes.push('ssm-row-selected');
-    var row = document.createElement('div');
-    row.className = classes.join(' ');
-    row.dataset.index = index;
+    var cursor = isSelected ? '\u25B6 ' : '  ';
 
-    var statusDot = '<span class="ssm-dot" style="background:' + getStatusColor(session.status) + '"></span>';
-    var name = '<span class="ssm-name">' + highlightMatch(session.name, searchQuery) + '</span>';
-    var host = '<span class="ssm-host">' + highlightMatch(session.host, searchQuery) + '</span>';
-    var user = '<span class="ssm-user">' + highlightMatch(session.user, searchQuery) + '</span>';
-    var port = '<span class="ssm-port">:' + escapeHtml(session.port) + '</span>';
+    var glyph, glyphColor;
+    if (session.status === 'green') { glyph = '\u25CF'; glyphColor = statusColors.green; }
+    else if (session.status === 'yellow') { glyph = '\u25CF'; glyphColor = statusColors.yellow; }
+    else if (session.status === 'red') { glyph = '\u25CF'; glyphColor = statusColors.red; }
+    else { glyph = '\u25CB'; glyphColor = statusColors.gray; }
 
-    var tagsHtml = '';
+    var hostFull = session.user + '@' + session.host;
+    var nameStr = truncate(session.name, 18);
+    var hostStr = truncateMiddle(hostFull, 22);
+    var portStr = pad(session.port, 5);
+    var latencyStr = session.latency !== null ? pad(session.latency + 'ms', 5) : pad('-', 5);
+
+    var tagsStr = '';
     for (var t = 0; t < session.tags.length; t++) {
-      tagsHtml += '<span class="ssm-tag">' + highlightMatch(session.tags[t], searchQuery) + '</span>';
+      tagsStr += escapeHtml(session.tags[t]) + ' ';
     }
+    tagsStr = tagsStr.trimEnd();
 
     var sparkline = buildSparkline(session.sparkline, session.status);
-    var latency = session.latency !== null
-      ? '<span class="ssm-latency">' + session.latency + 'ms</span>'
-      : '<span class="ssm-latency ssm-latency-down">unreachable</span>';
+
+    var row = document.createElement('div');
+    row.className = 'ssm-row' + (isSelected ? ' ssm-row-selected' : '');
+    row.dataset.index = index;
 
     row.innerHTML =
-      '<span class="ssm-cell-status">' + statusDot + '</span>' +
-      '<span class="ssm-cell-name">' + name + '</span>' +
-      '<span class="ssm-cell-host">' + host + '</span>' +
-      '<span class="ssm-cell-user">' + user + port + '</span>' +
-      '<span class="ssm-cell-tags">' + tagsHtml + '</span>' +
-      '<span class="ssm-cell-spark">' + sparkline + latency + '</span>';
+      '<span class="ssm-cursor">' + cursor + '</span>' +
+      '<span class="ssm-glyph" style="color:' + glyphColor + '">' + glyph + ' </span>' +
+      '<span class="ssm-cell-name">' + highlightMatch(nameStr, searchQuery) + '</span>' +
+      '<span class="ssm-cell-host">' + highlightMatch(hostStr, searchQuery) + '</span>' +
+      '<span class="ssm-cell-port">' + portStr + '</span>' +
+      '<span class="ssm-cell-latency">' + latencyStr + '</span>' +
+      '<span class="ssm-cell-spark">' + sparkline + '</span>' +
+      '<span class="ssm-cell-tags">' + tagsStr + '</span>';
 
     return row;
   }
@@ -162,18 +205,27 @@
   function showFlash(message) {
     var existing = container.querySelector('.ssm-flash');
     if (existing) existing.remove();
-
     if (flashTimer) clearTimeout(flashTimer);
 
     var flash = document.createElement('div');
     flash.className = 'ssm-flash';
-    flash.textContent = message;
-    container.appendChild(flash);
+    flash.textContent = '  ' + message;
+    var desc = container.querySelector('.ssm-desc');
+    if (desc) {
+      desc.innerHTML = '';
+      desc.appendChild(flash);
+    }
 
     flashTimer = setTimeout(function () {
-      if (flash.parentNode) flash.remove();
+      renderDesc();
       flashTimer = null;
     }, 1800);
+  }
+
+  function renderDesc() {
+    var desc = container.querySelector('.ssm-desc');
+    if (!desc) return;
+    desc.innerHTML = '<span class="ssm-desc-prompt">\u203A </span><span class="ssm-desc-text"></span>';
   }
 
   function showActionsMenu(session) {
@@ -190,8 +242,8 @@
       '<div class="ssm-actions-title">Actions for <strong>' + escapeHtml(session.name) + '</strong></div>' +
       '<div class="ssm-actions-item" data-action="connect"><span class="ssm-action-key">Enter</span> Connect</div>' +
       '<div class="ssm-actions-item" data-action="edit"><span class="ssm-action-key">e</span> Edit</div>' +
-      '<div class="ssm-actions-item" data-action="delete"><span class="ssm-action-key">d</span> Delete</div>' +
-      '<div class="ssm-actions-item" data-action="copy"><span class="ssm-action-key">y</span> Copy host</div>' +
+      '<div class="ssm-actions-item" data-action="delete"><span class="ssm-action-key">D</span> Delete</div>' +
+      '<div class="ssm-actions-item" data-action="copy"><span class="ssm-action-key">y</span> Yank host</div>' +
       '<div class="ssm-actions-dismiss">Press <strong>Space</strong> or <strong>Esc</strong> to close</div>';
 
     overlay.appendChild(menu);
@@ -200,8 +252,7 @@
     menu.addEventListener('click', function (e) {
       var item = e.target.closest('.ssm-actions-item');
       if (!item) return;
-      var action = item.dataset.action;
-      executeAction(action, session);
+      executeAction(item.dataset.action, session);
       closeActionsMenu();
     });
   }
@@ -231,11 +282,11 @@
 
   function showSearchBar() {
     searchMode = true;
-    var footer = container.querySelector('.ssm-footer');
+    var footer = container.querySelector('.ssm-footer-keys');
     if (!footer) return;
     footer.innerHTML =
-      '<span class="ssm-footer-keys">Esc to cancel | Type to filter</span>' +
-      '<span class="ssm-search-input-wrap">/<input class="ssm-search-input" id="ssm-search-input" type="text" autofocus autocomplete="off" spellcheck="false" value="' + escapeHtml(searchQuery) + '"></span>';
+      '<span class="ssm-search-input-wrap">/<input class="ssm-search-input" id="ssm-search-input" type="text" autofocus autocomplete="off" spellcheck="false" value="' + escapeHtml(searchQuery) + '"></span>' +
+      '<span class="ssm-footer-dim"> type to filter  enter apply  esc cancel</span>';
     var input = document.getElementById('ssm-search-input');
     if (input) {
       input.focus();
@@ -273,17 +324,10 @@
   }
 
   function renderFooter() {
-    var footer = container.querySelector('.ssm-footer');
-    if (!footer) return;
-    footer.innerHTML =
-      '<span class="ssm-footer-keys"><kbd>j</kbd>/<kbd>k</kbd> nav <kbd>/</kbd> search <kbd>Space</kbd> actions <kbd>t</kbd> theme</span>' +
-      '<span class="ssm-footer-theme">' + escapeHtml(getThemeName()) + '</span>';
-  }
-
-  function updateThemeDisplay() {
-    var header = container.querySelector('.ssm-header-theme');
-    if (header) header.textContent = getThemeName();
-    renderFooter();
+    var footerKeys = container.querySelector('.ssm-footer-keys');
+    if (!footerKeys) return;
+    footerKeys.innerHTML =
+      ' j/k move  enter connect  a add  e edit  / search  T tags  space menu  q quit ';
   }
 
   function buildStructure() {
@@ -291,33 +335,43 @@
     container.classList.add('ssm-tui');
 
     var header = document.createElement('div');
-    header.className = 'ssm-header';
-    header.innerHTML =
-      '<span class="ssm-header-title">ssm <span class="ssm-version">v1.0.0</span></span>' +
-      '<span class="ssm-header-theme">' + escapeHtml(getThemeName()) + '</span>';
+    header.className = 'ssm-border ssm-border--header';
+    header.textContent = buildHeaderBorder();
 
-    var listHeader = document.createElement('div');
-    listHeader.className = 'ssm-list-header';
-    listHeader.innerHTML =
-      '<span class="ssm-cell-status"></span>' +
-      '<span class="ssm-cell-name">Name</span>' +
-      '<span class="ssm-cell-host">Host</span>' +
-      '<span class="ssm-cell-user">User:Port</span>' +
-      '<span class="ssm-cell-tags">Tags</span>' +
-      '<span class="ssm-cell-spark">Latency</span>';
+    var colHeader = document.createElement('div');
+    colHeader.className = 'ssm-col-header';
+    colHeader.innerHTML =
+      '<span class="ssm-col-cursor"></span>' +
+      '<span class="ssm-col-glyph"></span>' +
+      '<span class="ssm-col-name">NAME</span>' +
+      '<span class="ssm-col-host">HOST</span>' +
+      '<span class="ssm-col-port">PORT</span>' +
+      '<span class="ssm-col-latency">PING</span>' +
+      '<span class="ssm-col-spark"></span>' +
+      '<span class="ssm-col-tags">TAGS</span>';
 
     var listBody = document.createElement('div');
     listBody.className = 'ssm-list-body';
 
-    var footer = document.createElement('div');
-    footer.className = 'ssm-footer';
+    var desc = document.createElement('div');
+    desc.className = 'ssm-desc';
+
+    var borderFooter = document.createElement('div');
+    borderFooter.className = 'ssm-border ssm-border--footer';
+    borderFooter.textContent = buildBorderLine(58);
+
+    var footerKeys = document.createElement('div');
+    footerKeys.className = 'ssm-footer-keys';
 
     container.appendChild(header);
-    container.appendChild(listHeader);
+    container.appendChild(colHeader);
     container.appendChild(listBody);
-    container.appendChild(footer);
+    container.appendChild(desc);
+    container.appendChild(borderFooter);
+    container.appendChild(footerKeys);
 
     renderFooter();
+    renderDesc();
     renderSessionList();
   }
 
@@ -326,7 +380,6 @@
       if (e.key === 'Escape') {
         e.preventDefault();
         hideSearchBar();
-        container.querySelector('.ssm-list-body').focus();
       }
       return;
     }
@@ -349,7 +402,6 @@
       e.preventDefault();
       currentTheme = (currentTheme + 1) % themeOrder.length;
       applyTheme();
-      showFlash('Theme: ' + getThemeName());
       return;
     }
 
@@ -382,6 +434,24 @@
       return;
     }
 
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (filteredIndices.length > 0) {
+        var s = sessions[selectedIndex];
+        showFlash('Connected to ' + s.name + ' (' + s.user + '@' + s.host + ')');
+      }
+      return;
+    }
+
+    if (e.key === 'y') {
+      e.preventDefault();
+      if (filteredIndices.length > 0) {
+        var s = sessions[selectedIndex];
+        showFlash('Copied ' + s.user + '@' + s.host);
+      }
+      return;
+    }
+
     clearTimeout(keyTimer);
     keyBuffer += e.key;
     keyTimer = setTimeout(function () { keyBuffer = ''; }, 500);
@@ -408,8 +478,6 @@
   function applyTheme() {
     var theme = themes[themeOrder[currentTheme]];
     container.style.setProperty('--ssm-accent', theme.accent);
-    container.style.setProperty('--ssm-bg', theme.bg);
-    updateThemeDisplay();
     renderSessionList();
   }
 
