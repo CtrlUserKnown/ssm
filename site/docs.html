@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Docs — ssm</title>
+  <meta name="description" content="Documentation for ssm — a terminal UI for managing SSH sessions with secure password storage, live reachability probing, tags, and vim-style navigation.">
+  <link rel="icon" href="img/svg/ssm_icon_color.svg" type="image/svg+xml">
+  <meta name="theme-color" content="#1a1a1a">
+
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://ctrluserknown.github.io/ssm/docs.html">
+  <meta property="og:title" content="Docs — ssm">
+  <meta property="og:description" content="Documentation for ssm — a terminal UI for managing SSH sessions with secure password storage, live reachability probing, tags, and vim-style navigation.">
+  <meta property="og:image" content="https://ctrluserknown.github.io/ssm/img/svg/ssm_icon_color.svg">
+
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:url" content="https://ctrluserknown.github.io/ssm/docs.html">
+  <meta name="twitter:title" content="Docs — ssm">
+  <meta name="twitter:description" content="Documentation for ssm — a terminal UI for managing SSH sessions with secure password storage, live reachability probing, tags, and vim-style navigation.">
+  <meta name="twitter:image" content="https://ctrluserknown.github.io/ssm/img/svg/ssm_icon_color.svg">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <nav class="nav" aria-label="Main navigation">
+    <div class="nav__inner">
+      <a href="index.html" class="nav__logo" aria-label="ssm home">
+        <img src="img/svg/ssm_logo_color.svg" alt="ssm">
+      </a>
+      <button class="nav__toggle" aria-label="Toggle menu" aria-expanded="false">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+      <div class="nav__menu">
+        <div class="nav__links">
+          <a href="index.html">Home</a>
+          <a href="about.html">About</a>
+          <a href="docs.html">Docs</a>
+          <a href="changelog.html">Changelog</a>
+        </div>
+        <a class="nav__github" href="https://github.com/CtrlUserKnown/ssm" target="_blank" rel="noopener noreferrer" aria-label="GitHub repository">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <main>
+    <div class="container">
+      <div class="docs-layout">
+        <nav class="docs-sidebar" aria-label="Documentation navigation">
+          <h4>Getting started</h4>
+          <a href="#installation">Installation</a>
+          <a href="#first-run">First run</a>
+
+          <h4>Usage</h4>
+          <a href="#tui">TUI overview</a>
+          <a href="#keyboard">Keyboard shortcuts</a>
+          <a href="#cli">CLI options</a>
+
+          <h4>Sessions</h4>
+          <a href="#managing">Managing sessions</a>
+          <a href="#import">SSH config import</a>
+          <a href="#tags">Tags</a>
+          <a href="#proxyjump">ProxyJump</a>
+
+          <h4>Security</h4>
+          <a href="#passwords">Password storage</a>
+          <a href="#askpass">SSH_ASKPASS</a>
+          <a href="#biometric">Biometric unlock</a>
+
+          <h4>Configuration</h4>
+          <a href="#config-file">Config file</a>
+          <a href="#themes">Themes</a>
+          <a href="#probing">Probing</a>
+        </nav>
+
+        <div class="docs-content">
+
+          <!-- ── Installation ──────────────────────────────── -->
+          <section id="installation">
+            <h2>Installation</h2>
+            <pre><code># Via cargo
+cargo install ssm
+
+# From GitHub Releases
+# Download the binary for your platform from:
+# https://github.com/CtrlUserKnown/ssm/releases</code></pre>
+
+            <div class="callout callout--info">
+              <strong>Note:</strong> ssm requires OpenSSH 8.4+ for the SSH_ASKPASS feature. Check your version with <code>ssh -V</code>.
+            </div>
+          </section>
+
+          <!-- ── First run ─────────────────────────────────── -->
+          <section id="first-run">
+            <h2>First run</h2>
+            <p>Run <code>ssm</code> to launch the TUI. On first launch, a config directory is created at <code>~/.config/ssm/</code>. Sessions are stored in <code>sessions.json</code> and preferences in <code>config.toml</code>.</p>
+          </section>
+
+          <!-- ── TUI overview ──────────────────────────────── -->
+          <section id="tui">
+            <h2>TUI overview</h2>
+            <p>The TUI has several screens:</p>
+            <ul style="list-style: disc; padding-left: 1.25rem;">
+              <li style="margin-bottom: 0.5rem;"><strong>List view</strong> (default): Shows all sessions with status dots, host info, tags, and latency sparklines.</li>
+              <li style="margin-bottom: 0.5rem;"><strong>Form view</strong>: Add or edit a session (7 fields: Name, Host, User, Port, ProxyJump, Tags, Password).</li>
+              <li style="margin-bottom: 0.5rem;"><strong>Search</strong>: Filter sessions with <code>/</code>.</li>
+              <li style="margin-bottom: 0.5rem;"><strong>Tag picker</strong>: Filter by tag with <code>T</code>.</li>
+              <li style="margin-bottom: 0.5rem;"><strong>Help</strong>: Press <code>?</code> for the full keybinding reference.</li>
+              <li style="margin-bottom: 0.5rem;"><strong>Confirm delete</strong>: Safety prompt before removing a session.</li>
+            </ul>
+          </section>
+
+          <!-- ── Keyboard shortcuts ─────────────────────────── -->
+          <section id="keyboard">
+            <h2>Keyboard shortcuts</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Key</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td><code>j</code> / <code>k</code></td><td>Move down / up</td></tr>
+                <tr><td><code>gg</code> / <code>G</code></td><td>Go to top / bottom</td></tr>
+                <tr><td><code>Ctrl-d</code> / <code>Ctrl-u</code></td><td>Half page down / up</td></tr>
+                <tr><td><code>Enter</code></td><td>Connect to session</td></tr>
+                <tr><td><code>a</code></td><td>Add new session</td></tr>
+                <tr><td><code>e</code></td><td>Edit selected session</td></tr>
+                <tr><td><code>d</code></td><td>Delete selected session</td></tr>
+                <tr><td><code>y</code></td><td>Yank user@host to clipboard</td></tr>
+                <tr><td><code>/</code></td><td>Search</td></tr>
+                <tr><td><code>T</code></td><td>Tag filter</td></tr>
+                <tr><td><code>Space</code></td><td>Actions menu</td></tr>
+                <tr><td><code>?</code></td><td>Help</td></tr>
+                <tr><td><code>q</code></td><td>Quit</td></tr>
+              </tbody>
+            </table>
+          </section>
+
+          <!-- ── CLI options ────────────────────────────────── -->
+          <section id="cli">
+            <h2>CLI options</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Command</th>
+                  <th>Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td><code>ssm</code></td><td>Launch the TUI</td></tr>
+                <tr><td><code>ssm -c user@host[:port]</code></td><td>Direct connect</td></tr>
+                <tr><td><code>ssm -l</code> / <code>ssm --list</code></td><td>Print sessions table</td></tr>
+                <tr><td><code>ssm --import [path]</code></td><td>Import from ssh_config</td></tr>
+                <tr><td><code>ssm --version</code></td><td>Show version</td></tr>
+                <tr><td><code>ssm --help</code></td><td>Show help</td></tr>
+              </tbody>
+            </table>
+          </section>
+
+          <!-- ── Managing sessions ──────────────────────────── -->
+          <section id="managing">
+            <h2>Managing sessions</h2>
+            <p>Each session has 7 fields:</p>
+            <ul style="list-style: disc; padding-left: 1.25rem;">
+              <li style="margin-bottom: 0.5rem;"><strong>Name</strong>: Display name for the session.</li>
+              <li style="margin-bottom: 0.5rem;"><strong>Host</strong>: Hostname or IP address.</li>
+              <li style="margin-bottom: 0.5rem;"><strong>User</strong>: SSH username.</li>
+              <li style="margin-bottom: 0.5rem;"><strong>Port</strong>: SSH port (default 22).</li>
+              <li style="margin-bottom: 0.5rem;"><strong>ProxyJump</strong>: Optional jump host (e.g., <code>bastion</code> or <code>user@bastion:2222</code>).</li>
+              <li style="margin-bottom: 0.5rem;"><strong>Tags</strong>: Free-form comma or space-separated labels.</li>
+              <li style="margin-bottom: 0.5rem;"><strong>Password</strong>: Optional, stored in OS keychain only.</li>
+            </ul>
+          </section>
+
+          <!-- ── SSH config import ──────────────────────────── -->
+          <section id="import">
+            <h2>SSH config import</h2>
+            <p>Run <code>ssm --import</code> to import sessions from <code>~/.ssh/config</code>. The import reads concrete Host blocks and carries over HostName, Port, User, and ProxyJump directives. Wildcard blocks (<code>Host *</code>, <code>Host web-*</code>) are skipped. Sessions with duplicate names are not overwritten.</p>
+            <pre><code># Import from default location (~/.ssh/config)
+ssm --import
+
+# Import from a custom path
+ssm --import /path/to/ssh/config</code></pre>
+          </section>
+
+          <!-- ── Tags ───────────────────────────────────────── -->
+          <section id="tags">
+            <h2>Tags</h2>
+            <p>Tags are free-form labels you assign to sessions. In the list view, tags appear as small blue chips. Press <code>T</code> to open the tag picker and filter the list to a specific tag. Search (<code>/</code>) also matches against tags.</p>
+          </section>
+
+          <!-- ── ProxyJump ──────────────────────────────────── -->
+          <section id="proxyjump">
+            <h2>ProxyJump</h2>
+            <p>The ProxyJump field specifies an intermediate host to SSH through. This is passed to ssh as <code>-J &lt;jump&gt;</code>. Examples:</p>
+            <pre><code>bastion                  # simple hostname
+user@bastion:2222        # with user and port
+bastion,internal         # multi-hop, comma-separated</code></pre>
+            <p>ProxyJump values imported from <code>~/.ssh/config</code> are carried over automatically.</p>
+          </section>
+
+          <!-- ── Password storage ───────────────────────────── -->
+          <section id="passwords">
+            <h2>Password storage</h2>
+            <p>ssm stores passwords in your OS keychain, never in plaintext on disk:</p>
+            <ul style="list-style: disc; padding-left: 1.25rem;">
+              <li style="margin-bottom: 0.5rem;"><strong>macOS</strong>: macOS Keychain (via the <code>apple-native</code> keyring backend)</li>
+              <li style="margin-bottom: 0.5rem;"><strong>Linux</strong>: Secret Service API (via <code>secret-service</code> backend, e.g., gnome-keyring)</li>
+            </ul>
+            <p>The JSON session file (<code>sessions.json</code>) contains all session fields except passwords.</p>
+          </section>
+
+          <!-- ── SSH_ASKPASS ────────────────────────────────── -->
+          <section id="askpass">
+            <h2>SSH_ASKPASS</h2>
+            <p>When connecting to a session with a stored password, ssm uses the SSH_ASKPASS mechanism:</p>
+            <ol style="list-style: decimal; padding-left: 1.25rem;">
+              <li style="margin-bottom: 0.5rem;">ssm creates a temporary Unix domain socket with 0600 permissions.</li>
+              <li style="margin-bottom: 0.5rem;">Sets <code>SSH_ASKPASS=/path/to/ssm</code> and <code>SSH_ASKPASS_REQUIRE=force</code>.</li>
+              <li style="margin-bottom: 0.5rem;">ssh re-execs ssm as the askpass helper.</li>
+              <li style="margin-bottom: 0.5rem;">The helper connects to the socket, presents a random nonce, and receives the password.</li>
+              <li style="margin-bottom: 0.5rem;">Serve-once semantics: on auth retry, the helper returns empty.</li>
+            </ol>
+            <div class="callout callout--warn">
+              <strong>Important:</strong> ssm only answers password prompts. It refuses key passphrase and host key confirmation prompts.
+            </div>
+          </section>
+
+          <!-- ── Biometric unlock ───────────────────────────── -->
+          <section id="biometric">
+            <h2>Biometric unlock</h2>
+            <p>Optional feature, off by default. When enabled, ssm requires biometric verification before releasing a stored password.</p>
+            <ul style="list-style: disc; padding-left: 1.25rem;">
+              <li style="margin-bottom: 0.5rem;"><strong>Linux</strong>: Uses <code>fprintd-verify</code> to check fingerprint presence.</li>
+              <li style="margin-bottom: 0.5rem;"><strong>macOS</strong>: Touch ID support (planned).</li>
+            </ul>
+            <p>Enable in <code>config.toml</code>:</p>
+            <pre><code>biometric = true</code></pre>
+            <div class="callout callout--tip">
+              <strong>Tip:</strong> If biometric is enabled but no verifier is available, ssm warns and proceeds normally.
+            </div>
+          </section>
+
+          <!-- ── Config file ────────────────────────────────── -->
+          <section id="config-file">
+            <h2>Config file</h2>
+            <p>Location: <code>~/.config/ssm/config.toml</code></p>
+            <pre><code>theme = "noir-cat"
+herdr = false
+probe = true
+biometric = false</code></pre>
+            <p>Override the config directory with <code>DOTS_SSM_DIR=/path/to/dir</code>.</p>
+          </section>
+
+          <!-- ── Themes ─────────────────────────────────────── -->
+          <section id="themes">
+            <h2>Themes</h2>
+            <p>ssm ships with 7 built-in themes:</p>
+            <ul style="list-style: disc; padding-left: 1.25rem;">
+              <li style="margin-bottom: 0.5rem;"><strong>auto</strong>: Follows terminal ANSI palette</li>
+              <li style="margin-bottom: 0.5rem;"><strong>noir-cat</strong>: Catppuccin Mocha on neutral gray</li>
+              <li style="margin-bottom: 0.5rem;"><strong>knew-pines</strong>: Rose Pine inspired</li>
+              <li style="margin-bottom: 0.5rem;"><strong>catppuccin</strong>: Catppuccin Mocha</li>
+              <li style="margin-bottom: 0.5rem;"><strong>gruvbox</strong>: Gruvbox dark</li>
+              <li style="margin-bottom: 0.5rem;"><strong>nord</strong>: Nord</li>
+              <li style="margin-bottom: 0.5rem;"><strong>tokyo-night</strong>: Tokyo Night</li>
+            </ul>
+            <p>Switch themes from the TUI: <code>Space</code> &gt; Settings &gt; Theme. Or set in <code>config.toml</code>.</p>
+          </section>
+
+          <!-- ── Probing ────────────────────────────────────── -->
+          <section id="probing">
+            <h2>Probing</h2>
+            <p>Background TCP probes run every few seconds on a dedicated thread. Each session gets:</p>
+            <ul style="list-style: disc; padding-left: 1.25rem;">
+              <li style="margin-bottom: 0.5rem;">A color-coded status dot: green (&lt;50ms), yellow (&lt;200ms), red (unreachable), gray (not yet probed)</li>
+              <li style="margin-bottom: 0.5rem;">A latency sparkline showing history</li>
+            </ul>
+            <p>Toggle probing: <code>Space</code> &gt; Settings &gt; Probe, or set in <code>config.toml</code>.</p>
+          </section>
+
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer" aria-label="Site footer">
+    <div class="container">
+      <div class="footer__inner">
+        <div class="footer__brand">
+          <img src="img/svg/ssm_icon_color.svg" alt="" width="18" height="18" aria-hidden="true">
+          <span class="footer__copy">ssm by CtrlUserKnown</span>
+        </div>
+        <nav class="footer__nav" aria-label="Footer navigation">
+          <a href="about.html">About</a>
+          <a href="docs.html">Docs</a>
+          <a href="changelog.html">Changelog</a>
+          <a href="https://github.com/CtrlUserKnown/ssm" target="_blank" rel="noopener noreferrer">GitHub</a>
+        </nav>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/nav.js"></script>
+  <script src="js/docs.js"></script>
+</body>
+</html>

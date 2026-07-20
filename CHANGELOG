@@ -1,0 +1,42 @@
+# Changelog
+
+## [1.0.0] - 2026-07-20
+
+### Added
+
+- Extracted ssm as a standalone binary from the dots project
+- Rich terminal user interface built with ratatui and crossterm
+- Session management: add, edit, delete SSH sessions via a TUI form
+- Secure password storage using the OS keychain (macOS Keychain, Linux Secret Service)
+- SSH_ASKPASS mechanism for zero-exposure password handling
+- One-time-nonce Unix domain socket for password delivery
+- SSH config import from ~/.ssh/config with wildcard block filtering
+- Tags system with comma/space-separated tags and tag-based filtering
+- ProxyJump (jump host) support per session
+- Live TCP reachability probing with latency sparklines
+- Biometric unlock support (fprintd on Linux, Touch ID stub on macOS)
+- 7 built-in themes: auto, noir-cat, knew-pines, catppuccin, gruvbox, nord, tokyo-night
+- Vim-style keybindings with numeric prefix support (e.g. 5j)
+- Clipboard yank for user@host (pbcopy, xclip, xsel)
+- Direct connect mode via `ssm -c user@host[:port]`
+- Session list output via `ssm --list`
+- SSH config import via `ssm --import`
+- Auto-reload when sessions.json changes externally
+- Which-key menu system for settings and theme switching
+- Minimum terminal size guard (50x10)
+- Integration tests and end-to-end SSH_ASKPASS tests
+- CI/CD with GitHub Actions for lint, test, and cross-platform release builds
+
+### Changed
+
+- Separated from the dots project into its own independent repository and binary
+- Configuration directory moved to ~/.config/ssm/
+- Session storage uses JSON with passwords excluded from disk (keychain only)
+
+### Security
+
+- Passwords are never stored in plaintext on disk
+- Passwords are served via SSH_ASKPASS with one-time-nonce socket protection
+- Serve-once semantics prevent brute-force loops on wrong passwords
+- Selective prompt answering: only passwords, never key passphrases or host key confirmations
+- Automatic migration from legacy JSON that stored plaintext passwords
