@@ -34,6 +34,19 @@ The binary will be at `target/release/ssm`.
 - Optional: `fprintd` (`fprintd-verify`) for biometric unlock
 - Optional: `xclip` or `xsel` for clipboard yank support
 
+### Prerequisites (macOS)
+
+- Xcode Command Line Tools (`xcode-select --install`) for the Apple linker and
+  `Security.framework`
+- No Homebrew packages needed — the native `apple-native` (Keychain) backend is
+  used instead of the Linux Secret Service one
+- macOS's bundled OpenSSH (9.x on recent releases) is already new enough
+
+ssm can't be cross-compiled from Linux for macOS (the keychain backend links
+`Security.framework`, which needs the macOS SDK); see
+[BUILD_MACOS.md](BUILD_MACOS.md) for the full native build, universal-binary
+(arm64 + x86_64), and code-signing steps.
+
 ## Usage
 
 ```bash
@@ -74,10 +87,11 @@ ssm --import /path/to/ssh_config
 | `Enter` | Connect to selected session |
 | `a` | Add new session |
 | `e` | Edit selected session |
-| `D`/`dd` | Delete selected session |
+| `D` | Delete selected session (prompts for confirmation) |
 | `y` | Yank (copy) host to clipboard |
 | `/` | Search/filter sessions (matches tags too) |
 | `T` | Filter by tag (group view); `Esc` clears the filter |
+| `s` | Open settings menu (herdr, probe, biometric, theme) |
 | `u` | Reload sessions from disk |
 | `Space` | Open which-key menu (delete, yank, tag filter, import, settings) |
 | `?` | Toggle help screen |
@@ -179,4 +193,4 @@ Cycle through themes live from the TUI via `Space` → Settings → Theme. Avail
 
 ## License
 
-See [LICENSE](LICENSE) for details.
+No license file is currently included in this repository.
