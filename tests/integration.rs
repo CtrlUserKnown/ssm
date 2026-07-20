@@ -4,7 +4,8 @@ use tempfile::tempdir;
 
 #[test]
 fn version_flag() {
-    Command::cargo_bin("ssm").unwrap()
+    Command::cargo_bin("ssm")
+        .unwrap()
         .arg("--version")
         .assert()
         .success()
@@ -13,7 +14,8 @@ fn version_flag() {
 
 #[test]
 fn help_flag() {
-    Command::cargo_bin("ssm").unwrap()
+    Command::cargo_bin("ssm")
+        .unwrap()
         .arg("--help")
         .assert()
         .success();
@@ -22,7 +24,8 @@ fn help_flag() {
 #[test]
 fn ssm_list_empty() {
     let tmp = tempdir().unwrap();
-    Command::cargo_bin("ssm").unwrap()
+    Command::cargo_bin("ssm")
+        .unwrap()
         .env("DOTS_SSM_DIR", tmp.path())
         .arg("--list")
         .assert()

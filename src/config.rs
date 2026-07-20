@@ -18,11 +18,22 @@ pub struct SsmConfig {
     /// Name of the active color theme (see [`crate::tui_core::theme`]). "auto"
     /// follows the terminal's ANSI palette.
     pub theme: String,
+    /// Whether to run background reachability probes and show latency in the
+    /// list (see [`crate::probe`]).
+    pub probe: bool,
+    /// Require a biometric check (opt-in) before revealing a stored password at
+    /// connect time (see [`crate::security`]). Off by default.
+    pub biometric_unlock: bool,
 }
 
 impl Default for SsmConfig {
     fn default() -> Self {
-        Self { use_herdr: true, theme: "auto".to_string() }
+        Self {
+            use_herdr: true,
+            theme: "auto".to_string(),
+            probe: true,
+            biometric_unlock: false,
+        }
     }
 }
 
@@ -45,7 +56,10 @@ pub fn load() -> SsmConfig {
     match toml::from_str::<SsmConfig>(&text) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("warning: {} is malformed ({e}); using defaults", path.display());
+            eprintln!(
+                "warning: {} is malformed ({e}); using defaults",
+                path.display()
+            );
             SsmConfig::default()
         }
     }
@@ -55,10 +69,9 @@ pub fn load() -> SsmConfig {
 pub fn save(cfg: &SsmConfig) -> Result<()> {
     let path = config_path();
     if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)
-            .with_context(|| format!("creating {}", dir.display()))?;
+        std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
     }
-    let tmp  = path.with_extension("toml.tmp");
+    let tmp = path.with_extension("toml.tmp");
     let text = toml::to_string_pretty(cfg).context("serializing ssm config")?;
     std::fs::write(&tmp, &text).with_context(|| format!("writing {}", tmp.display()))?;
     std::fs::rename(&tmp, &path).with_context(|| format!("renaming into {}", path.display()))?;
@@ -76,10 +89,30 @@ mod tests {
 
     #[test]
     fn roundtrip_parse() {
-        let text = toml::to_string_pretty(&SsmConfig { use_herdr: false, theme: "gruvbox".into() }).unwrap();
+        let text = toml::to_string_pretty(&SsmConfig {
+            use_herdr: false,
+            theme: "gruvbox".into(),
+            probe: false,
+            biometric_unlock: true,
+        })
+        .unwrap();
         let parsed: SsmConfig = toml::from_str(&text).unwrap();
         assert!(!parsed.use_herdr);
         assert_eq!(parsed.theme, "gruvbox");
+        assert!(!parsed.probe);
+        assert!(parsed.biometric_unlock);
+    }
+
+    #[test]
+    fn biometric_defaults_off() {
+        let parsed: SsmConfig = toml::from_str("").unwrap();
+        assert!(!parsed.biometric_unlock);
+    }
+
+    #[test]
+    fn probe_defaults_on() {
+        let parsed: SsmConfig = toml::from_str("").unwrap();
+        assert!(parsed.probe);
     }
 
     #[test]

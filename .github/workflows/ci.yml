@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+# Note: `cargo fmt --check` is intentionally NOT run here. This repo uses a
+# deliberate hand-aligned style (aligned struct fields, padded `let` bindings)
+# that stock rustfmt would rewrite, so a format gate would fail on clean code.
+
+jobs:
+  test:
+    name: test / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, macos-latest ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust (stable + clippy)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache cargo registry and build
+        uses: Swatinem/rust-cache@v2
+
+      # ssm stores passwords in the OS keychain. On Linux that's the Secret
+      # Service over D-Bus; libdbus-1-dev is required to build the backend, and
+      # gnome-keyring provides a keyring to exercise the storage layer for real.
+      - name: Install Secret Service deps (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gnome-keyring libdbus-1-dev
+
+      - name: Build (all targets)
+        run: cargo build --all-targets --all-features --verbose
+
+      - name: Clippy (warnings are errors)
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      # Run tests inside a private D-Bus session with an unlocked keyring so the
+      # keychain-backed code paths run against a real Secret Service.
+      - name: Test (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          dbus-run-session -- bash -c '
+            gnome-keyring-daemon --components=secrets --daemonize --unlock <<< "" || true
+            cargo test --all-features --verbose
+          '
+
+      - name: Test (macOS)
+        if: runner.os == 'macOS'
+        run: cargo test --all-features --verbose

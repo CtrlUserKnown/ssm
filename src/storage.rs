@@ -10,6 +10,15 @@ pub struct Session {
     pub host: String,
     pub user: String,
     pub port: u16,
+    /// Free-form labels used to organize and filter sessions (e.g. `prod`,
+    /// `web`). Persisted in the JSON store; empty by default so older files
+    /// deserialize cleanly.
+    #[serde(default)]
+    pub tags: Vec<String>,
+    /// Optional `ProxyJump` target (`user@jump[:port]` or an ssh_config alias),
+    /// passed to ssh as `-J`. `None` means a direct connection.
+    #[serde(default)]
+    pub proxy_jump: Option<String>,
     #[serde(skip)]
     pub password: String,
 }
@@ -17,10 +26,12 @@ pub struct Session {
 impl Default for Session {
     fn default() -> Self {
         Self {
-            name:     String::new(),
-            host:     String::new(),
-            user:     String::new(),
-            port:     22,
+            name: String::new(),
+            host: String::new(),
+            user: String::new(),
+            port: 22,
+            tags: Vec::new(),
+            proxy_jump: None,
             password: String::new(),
         }
     }
@@ -42,11 +53,10 @@ pub fn sessions_path() -> PathBuf {
 const SERVICE: &str = "dots-ssm";
 
 pub fn keychain_available() -> bool {
-    let Ok(e) = keyring::Entry::new(SERVICE, "__probe__") else { return false };
-    match e.get_password() {
-        Err(keyring::Error::NoStorageAccess(_)) => false,
-        _ => true,
-    }
+    let Ok(e) = keyring::Entry::new(SERVICE, "__probe__") else {
+        return false;
+    };
+    !matches!(e.get_password(), Err(keyring::Error::NoStorageAccess(_)))
 }
 
 pub fn kr_store(name: &str, password: &str) -> Result<()> {
@@ -77,19 +87,19 @@ pub fn load_sessions_from(path: &Path) -> Result<Vec<Session>> {
     if !path.exists() {
         return Ok(Vec::new());
     }
-    let raw = std::fs::read_to_string(path)
-        .with_context(|| format!("reading {}", path.display()))?;
+    let raw =
+        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
 
     // Parse as raw Value first to detect and migrate plaintext passwords
-    let values: Vec<serde_json::Value> = serde_json::from_str(&raw)
-        .with_context(|| "parsing sessions JSON")?;
+    let values: Vec<serde_json::Value> =
+        serde_json::from_str(&raw).with_context(|| "parsing sessions JSON")?;
 
     let mut sessions = Vec::with_capacity(values.len());
     let mut migrated = false;
 
     for v in &values {
-        let mut s: Session = serde_json::from_value(v.clone())
-            .with_context(|| "deserializing session")?;
+        let s: Session =
+            serde_json::from_value(v.clone()).with_context(|| "deserializing session")?;
 
         // Migration: old format stored password in JSON
         if let Some(pw) = v.get("password").and_then(|p| p.as_str()) {
@@ -99,11 +109,9 @@ pub fn load_sessions_from(path: &Path) -> Result<Vec<Session>> {
             }
         }
 
-        // Load password from keychain
-        if let Some(pw) = kr_load(&s.name) {
-            s.password = pw;
-        }
-
+        // Passwords are loaded lazily (see `security::reveal`), not eagerly here:
+        // keeping them out of memory until connect time is what lets an optional
+        // biometric prompt actually gate access. `s.password` stays empty.
         sessions.push(s);
     }
 
@@ -133,7 +141,7 @@ pub fn save_sessions_to(sessions: &[Session], path: &Path) -> Result<()> {
         }
     }
 
-    let tmp  = path.with_extension("json.tmp");
+    let tmp = path.with_extension("json.tmp");
     let json = serde_json::to_string_pretty(sessions).context("serializing sessions")?;
     std::fs::write(&tmp, json).with_context(|| format!("writing {}", tmp.display()))?;
     std::fs::rename(&tmp, path).with_context(|| "renaming tmp to sessions.json")?;
@@ -144,7 +152,11 @@ pub fn sessions_mtime() -> f64 {
     let path = sessions_path();
     std::fs::metadata(&path)
         .and_then(|m| m.modified())
-        .map(|t| t.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs_f64())
+        .map(|t| {
+            t.duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs_f64()
+        })
         .unwrap_or(0.0)
 }
 
@@ -157,37 +169,48 @@ mod tests {
 
     #[test]
     fn password_not_in_json() {
-        let tmp  = tempdir().unwrap();
+        let tmp = tempdir().unwrap();
         let path = tmp.path().join("sessions.json");
 
         let s = Session {
-            name:     "test-host".to_string(),
-            host:     "192.168.1.1".to_string(),
-            user:     "admin".to_string(),
-            port:     22,
+            name: "test-host".to_string(),
+            host: "192.168.1.1".to_string(),
+            user: "admin".to_string(),
+            port: 22,
             password: "secret".to_string(),
+            ..Session::default()
         };
 
         save_sessions_to(&[s], &path).unwrap();
 
         let json = std::fs::read_to_string(&path).unwrap();
-        assert!(!json.contains("secret"),   "password leaked into JSON: {json}");
-        assert!(!json.contains("password"), "password key present in JSON: {json}");
+        assert!(
+            !json.contains("secret"),
+            "password leaked into JSON: {json}"
+        );
+        assert!(
+            !json.contains("password"),
+            "password key present in JSON: {json}"
+        );
     }
 
     #[test]
     fn migration_strips_plaintext_password() {
-        let tmp  = tempdir().unwrap();
+        let tmp = tempdir().unwrap();
         let path = tmp.path().join("sessions.json");
 
         // Old-format JSON with plaintext password
-        let old = r#"[{"name":"myhost","host":"1.2.3.4","user":"alice","port":22,"password":"hunter2"}]"#;
+        let old =
+            r#"[{"name":"myhost","host":"1.2.3.4","user":"alice","port":22,"password":"hunter2"}]"#;
         std::fs::write(&path, old).unwrap();
 
         let sessions = load_sessions_from(&path).unwrap();
         assert_eq!(sessions.len(), 1);
         let new_json = std::fs::read_to_string(&path).unwrap();
-        assert!(!new_json.contains("hunter2"), "plaintext password still in file after migration");
+        assert!(
+            !new_json.contains("hunter2"),
+            "plaintext password still in file after migration"
+        );
     }
 
     #[test]
@@ -197,7 +220,7 @@ mod tests {
 
     #[test]
     fn roundtrip_name_host_port() {
-        let tmp  = tempdir().unwrap();
+        let tmp = tempdir().unwrap();
         let path = tmp.path().join("sessions.json");
 
         let s = Session {
@@ -206,6 +229,7 @@ mod tests {
             user: "root".to_string(),
             port: 2222,
             password: String::new(),
+            ..Session::default()
         };
         save_sessions_to(&[s], &path).unwrap();
 
@@ -213,5 +237,41 @@ mod tests {
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].name, "prod");
         assert_eq!(loaded[0].port, 2222);
+    }
+
+    #[test]
+    fn tags_and_proxy_jump_roundtrip() {
+        let tmp = tempdir().unwrap();
+        let path = tmp.path().join("sessions.json");
+
+        let s = Session {
+            name: "web".to_string(),
+            host: "10.0.0.2".to_string(),
+            user: "deploy".to_string(),
+            port: 22,
+            tags: vec!["prod".to_string(), "web".to_string()],
+            proxy_jump: Some("bastion".to_string()),
+            password: String::new(),
+        };
+        save_sessions_to(&[s], &path).unwrap();
+
+        let loaded = load_sessions_from(&path).unwrap();
+        assert_eq!(loaded[0].tags, vec!["prod".to_string(), "web".to_string()]);
+        assert_eq!(loaded[0].proxy_jump.as_deref(), Some("bastion"));
+    }
+
+    #[test]
+    fn legacy_file_without_tags_loads() {
+        let tmp = tempdir().unwrap();
+        let path = tmp.path().join("sessions.json");
+
+        // Pre-tags format: no `tags` / `proxy_jump` keys at all.
+        let old = r#"[{"name":"legacy","host":"1.2.3.4","user":"alice","port":22}]"#;
+        std::fs::write(&path, old).unwrap();
+
+        let loaded = load_sessions_from(&path).unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert!(loaded[0].tags.is_empty());
+        assert!(loaded[0].proxy_jump.is_none());
     }
 }

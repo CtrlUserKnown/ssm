@@ -8,7 +8,9 @@ use crossterm::{
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 
-use ssm::connect::{cli_list, connect_direct};
+use std::path::PathBuf;
+
+use ssm::connect::{cli_import, cli_list, connect_direct};
 use ssm::storage::keychain_available;
 use ssm::tui::run_ssm;
 
@@ -21,9 +23,19 @@ struct Cli {
     /// List saved sessions
     #[arg(short = 'l', long)]
     list: bool,
+    /// Import hosts from an ssh_config file (defaults to ~/.ssh/config)
+    #[arg(long, value_name = "PATH", num_args = 0..=1, default_missing_value = "")]
+    import: Option<String>,
 }
 
 fn main() -> anyhow::Result<()> {
+    // When ssh re-execs us as its SSH_ASKPASS helper, short-circuit before any
+    // normal argument parsing: serve the password and exit. Detected purely by
+    // the environment our own askpass server exports into the ssh child.
+    if ssm::askpass::is_responder() {
+        ssm::askpass::respond(); // never returns
+    }
+
     let cli = Cli::parse();
 
     if let Some(spec) = cli.connect {
@@ -32,6 +44,15 @@ fn main() -> anyhow::Result<()> {
     if cli.list {
         return cli_list();
     }
+    if let Some(path) = cli.import {
+        // Empty string = flag given with no value = use the default path.
+        let path = if path.is_empty() {
+            None
+        } else {
+            Some(PathBuf::from(path))
+        };
+        return cli_import(path);
+    }
 
     run_tui()
 }
@@ -39,7 +60,9 @@ fn main() -> anyhow::Result<()> {
 fn run_tui() -> anyhow::Result<()> {
     if !keychain_available() {
         eprintln!("SSM requires a keychain/secret-service backend.");
-        eprintln!("On Linux, ensure a secret-service daemon (e.g. gnome-keyring or kwallet) is running.");
+        eprintln!(
+            "On Linux, ensure a secret-service daemon (e.g. gnome-keyring or kwallet) is running."
+        );
         return Ok(());
     }
 
@@ -56,7 +79,7 @@ fn run_tui() -> anyhow::Result<()> {
     enable_raw_mode().context("could not enter raw mode")?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
-    let backend  = CrosstermBackend::new(stdout);
+    let backend = CrosstermBackend::new(stdout);
     let mut term = Terminal::new(backend)?;
 
     struct Guard;
