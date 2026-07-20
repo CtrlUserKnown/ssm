@@ -677,7 +677,10 @@ fn render_session_rows(f: &mut Frame, area: Rect, app: &SsmApp, _highlight: Opti
     }
 
     // Column header. The leading two spaces cover the cursor + status glyph.
-    let hdr = format!("    {:<20} {:<24} {:<6} {}", "NAME", "HOST", "PORT", "PING");
+    let hdr = format!(
+        "    {:<20} {:<24} {:<6} {:<6} {}",
+        "NAME", "HOST", "PORT", "PING", "TAGS"
+    );
     f.render_widget(
         Paragraph::new(Line::from(Span::styled(hdr, style_dim()))),
         Rect {
@@ -718,11 +721,14 @@ fn render_session_rows(f: &mut Frame, area: Rect, app: &SsmApp, _highlight: Opti
         // Status glyph, colored by the latest probe (semantic colors, not themed).
         let (glyph, gcolor) = probe_indicator(app, s);
 
-        let host_col = if s.user.is_empty() {
+        let host_full = if s.user.is_empty() {
             s.host.clone()
         } else {
             format!("{}@{}", s.user, s.host)
         };
+        // Middle-truncate the address so a long host keeps the grid aligned
+        // (e.g. "userknown@us...ts.net") instead of overflowing its column.
+        let host_col = truncate_middle(&host_full, 24);
         let name_trunc = truncate(&s.name, 20);
 
         let mut spans = vec![
@@ -795,6 +801,25 @@ fn truncate(s: &str, max: usize) -> String {
     } else {
         s.chars().take(max).collect()
     }
+}
+
+/// Truncate `s` to at most `max` chars, collapsing the middle into "..." so both
+/// ends stay readable (char-safe). For very small `max` it falls back to a plain
+/// head-truncation since an ellipsis wouldn't fit.
+fn truncate_middle(s: &str, max: usize) -> String {
+    let count = s.chars().count();
+    if count <= max {
+        return s.to_string();
+    }
+    if max <= 3 {
+        return s.chars().take(max).collect();
+    }
+    let keep = max - 3;
+    let front = keep.div_ceil(2);
+    let back = keep - front;
+    let head: String = s.chars().take(front).collect();
+    let tail: String = s.chars().skip(count - back).collect();
+    format!("{head}...{tail}")
 }
 
 /// Status glyph + color for a session's current probe state.
