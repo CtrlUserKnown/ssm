@@ -24,6 +24,11 @@ pub struct SsmConfig {
     /// Require a biometric check (opt-in) before revealing a stored password at
     /// connect time (see [`crate::security`]). Off by default.
     pub biometric_unlock: bool,
+    /// Periodically check GitHub Releases for a newer ssm and surface it in the
+    /// TUI (see [`crate::update`]). On by default.
+    pub update_check: bool,
+    /// Minutes between update checks, throttled via a stamp file. 1440 = daily.
+    pub update_frequency: u64,
 }
 
 impl Default for SsmConfig {
@@ -33,6 +38,8 @@ impl Default for SsmConfig {
             theme: "auto".to_string(),
             probe: true,
             biometric_unlock: false,
+            update_check: true,
+            update_frequency: 1440,
         }
     }
 }
@@ -94,6 +101,8 @@ mod tests {
             theme: "gruvbox".into(),
             probe: false,
             biometric_unlock: true,
+            update_check: false,
+            update_frequency: 60,
         })
         .unwrap();
         let parsed: SsmConfig = toml::from_str(&text).unwrap();
@@ -101,6 +110,15 @@ mod tests {
         assert_eq!(parsed.theme, "gruvbox");
         assert!(!parsed.probe);
         assert!(parsed.biometric_unlock);
+        assert!(!parsed.update_check);
+        assert_eq!(parsed.update_frequency, 60);
+    }
+
+    #[test]
+    fn update_check_defaults_on() {
+        let parsed: SsmConfig = toml::from_str("").unwrap();
+        assert!(parsed.update_check);
+        assert_eq!(parsed.update_frequency, 1440);
     }
 
     #[test]

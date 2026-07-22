@@ -16,11 +16,14 @@ use ratatui::{
     Frame, Terminal,
 };
 
+use std::sync::mpsc::Receiver;
+
 use super::config;
 use super::connect::{do_connect, ConnectConfig};
 use super::probe::{self, ProbeState, Prober};
 use super::ssh_config;
 use super::storage::{kr_delete, load_sessions, save_sessions, sessions_mtime, Session};
+use super::update::{self, InstallSource, UpdateInfo};
 use crate::tui_core::theme;
 use crate::tui_core::theme::{style_dim, style_error, style_header, style_select};
 use crate::tui_core::{draw_desc, draw_footer, draw_header, FlashKind};
@@ -29,7 +32,7 @@ use crate::tui_core::{draw_desc, draw_footer, draw_header, FlashKind};
 const PROBE_INTERVAL: Duration = Duration::from_secs(5);
 const PROBE_TIMEOUT: Duration = Duration::from_millis(1500);
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+const VERSION: &str = env!("SSM_VERSION");
 
 // ── screens ───────────────────────────────────────────────────────────────────
 
@@ -41,6 +44,7 @@ enum SsmScreen {
     Help,
     ConfirmDelete,
     TagPick,
+    Update,
 }
 
 // ── which-key menu ──────────────────────────────────────────────────────────────
@@ -292,6 +296,23 @@ pub struct SsmApp {
     prober: Option<Prober>,
     /// Per-host probe state keyed by `"host:port"`.
     probes: HashMap<String, ProbeState>,
+    // ── self-update ──
+    /// Whether periodic update checks are enabled.
+    update_check: bool,
+    /// Minutes between update checks.
+    update_frequency: u64,
+    /// How ssm was installed — gates whether self-replace is allowed.
+    install_source: InstallSource,
+    /// A newer release, once the background check finds one.
+    update_info: Option<UpdateInfo>,
+    /// Pending background check result; drained each frame.
+    update_check_rx: Option<Receiver<anyhow::Result<Option<UpdateInfo>>>>,
+    /// Pending apply result while a download is in flight.
+    update_apply_rx: Option<Receiver<anyhow::Result<()>>>,
+    /// True while the binary swap is downloading/installing.
+    update_applying: bool,
+    /// True once the swap succeeded — the update view then asks for a restart.
+    update_done: bool,
 }
 
 impl SsmApp {
@@ -324,6 +345,54 @@ impl SsmApp {
             probe_enabled: cfg.probe,
             prober: None,
             probes: HashMap::new(),
+            update_check: cfg.update_check,
+            update_frequency: cfg.update_frequency,
+            install_source: update::install_source(),
+            update_info: None,
+            update_check_rx: None,
+            update_apply_rx: None,
+            update_applying: false,
+            update_done: false,
+        }
+    }
+
+    /// Drain any finished background update work (check + apply).
+    fn pump_update(&mut self) {
+        // A completed check either surfaces a newer release or is silently
+        // dropped (already current / offline). Errors stay quiet — the updater
+        // is a convenience, not a critical path.
+        if let Some(rx) = &self.update_check_rx {
+            if let Ok(result) = rx.try_recv() {
+                if let Ok(Some(info)) = result {
+                    self.update_info = Some(info);
+                }
+                self.update_check_rx = None;
+            }
+        }
+        // A finished apply flips us into the "restart ssm" state or flashes why
+        // it failed.
+        if let Some(rx) = &self.update_apply_rx {
+            if let Ok(result) = rx.try_recv() {
+                self.update_applying = false;
+                self.update_apply_rx = None;
+                match result {
+                    Ok(()) => self.update_done = true,
+                    Err(e) => {
+                        self.flash = Some((format!("✗ Update failed: {e}"), FlashKind::Error))
+                    }
+                }
+            }
+        }
+    }
+
+    /// Kick off applying the pending update on a background thread.
+    fn start_update_apply(&mut self) {
+        if self.update_applying || self.update_done {
+            return;
+        }
+        if let Some(info) = self.update_info.clone() {
+            self.update_applying = true;
+            self.update_apply_rx = Some(update::spawn_apply(info));
         }
     }
 
@@ -456,6 +525,12 @@ pub fn run_ssm(
     app.prober = Some(Prober::spawn(PROBE_INTERVAL, PROBE_TIMEOUT));
     app.sync_probe_targets();
 
+    // Kick off a throttled release check in the background (self-managed installs
+    // only — package-manager installs defer to their manager).
+    if app.update_check && app.install_source == InstallSource::SelfManaged {
+        app.update_check_rx = Some(update::spawn_check(app.update_frequency));
+    }
+
     loop {
         let sessions_before = app.sessions.len();
         app.reload_if_changed();
@@ -465,6 +540,7 @@ pub fn run_ssm(
         }
 
         app.pump_probes();
+        app.pump_update();
 
         terminal.draw(|f| render_ssm(f, &app))?;
 
@@ -565,6 +641,7 @@ fn render_ssm(f: &mut Frame, app: &SsmApp) {
         SsmScreen::Help => render_help(f, area, app),
         SsmScreen::ConfirmDelete => render_list_with_confirm(f, area, app),
         SsmScreen::TagPick => render_tag_pick(f, area, app),
+        SsmScreen::Update => render_update(f, area, app),
     }
 
     // The which-key popup overlays whatever screen is behind it.
@@ -648,9 +725,15 @@ fn render_which_key(f: &mut Frame, area: Rect, app: &SsmApp, menu: WhichKey) {
 fn render_list(f: &mut Frame, area: Rect, app: &SsmApp) {
     draw_header(f, area, " ssm ", VERSION);
     render_session_rows(f, area, app, None);
-    let desc = match &app.tag_filter {
-        Some(tag) => format!("tag: {tag}  (esc clears)"),
-        None => String::new(),
+    // A pending update takes precedence in the desc bar so it's hard to miss; the
+    // tag filter (if any) otherwise shows there.
+    let desc = if let Some(info) = &app.update_info {
+        format!("▲ update available: v{}  (press U)", info.latest)
+    } else {
+        match &app.tag_filter {
+            Some(tag) => format!("tag: {tag}  (esc clears)"),
+            None => String::new(),
+        }
     };
     draw_desc(f, area, &desc, app.flash.as_ref());
     draw_footer(
@@ -1043,6 +1126,7 @@ fn render_help(f: &mut Frame, area: Rect, app: &SsmApp) {
         ("  i", "import hosts from ~/.ssh/config"),
         ("  s", "settings menu (h herdr, p probe, t theme)"),
         ("  u", "reload sessions from disk"),
+        ("  U", "check for / apply ssm updates"),
         ("  ?", "this help screen"),
         ("  q", "quit SSM"),
         ("", ""),
@@ -1084,6 +1168,86 @@ fn render_help(f: &mut Frame, area: Rect, app: &SsmApp) {
     draw_footer(f, area, " q back ");
 }
 
+/// The self-update view: current vs. latest, and an action to apply. What it
+/// shows depends on install source and how far the background work has gotten.
+fn render_update(f: &mut Frame, area: Rect, app: &SsmApp) {
+    draw_header(f, area, " ssm update ", VERSION);
+
+    let mut lines: Vec<Line> = Vec::new();
+    let bold = style_header().add_modifier(Modifier::BOLD);
+
+    lines.push(Line::from(vec![
+        Span::styled(format!("{:<12}", "current"), bold),
+        Span::styled(format!("v{}", update::CURRENT), style_dim()),
+    ]));
+
+    // Footer hint tracks which actions are live in the current state.
+    let footer = if app.update_done {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            "✓ Updated — restart ssm to run the new version.",
+            style_select(),
+        )));
+        " q back "
+    } else if app.update_applying {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            "Downloading and installing… this can take a moment.",
+            bold,
+        )));
+        " q back "
+    } else if let Some(msg) = app.install_source.defer_message() {
+        // Package-manager install: never self-replace, just point at the manager.
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            format!("Installed via a package manager — {msg}."),
+            style_dim(),
+        )));
+        " q back "
+    } else if let Some(info) = &app.update_info {
+        lines.push(Line::from(vec![
+            Span::styled(format!("{:<12}", "latest"), bold),
+            Span::styled(format!("v{}", info.latest), style_select()),
+        ]));
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            "A newer release is available.",
+            style_header(),
+        )));
+        " a apply update  r re-check  q back "
+    } else if app.update_check_rx.is_some() {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled("Checking for updates…", style_dim())));
+        " q back "
+    } else {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            "You're on the latest version.",
+            style_dim(),
+        )));
+        " r re-check  q back "
+    };
+
+    for (i, line) in lines.into_iter().enumerate() {
+        let y = area.y + 2 + i as u16;
+        if y + 4 >= area.y + area.height {
+            break;
+        }
+        f.render_widget(
+            Paragraph::new(line),
+            Rect {
+                x: area.x + 2,
+                y,
+                width: area.width.saturating_sub(4),
+                height: 1,
+            },
+        );
+    }
+
+    draw_desc(f, area, "", app.flash.as_ref());
+    draw_footer(f, area, footer);
+}
+
 // ── key handling ──────────────────────────────────────────────────────────────
 
 fn handle_ssm_key(app: &mut SsmApp, key: KeyEvent) {
@@ -1098,6 +1262,7 @@ fn handle_ssm_key(app: &mut SsmApp, key: KeyEvent) {
         SsmScreen::Form => handle_form_key(app, key),
         SsmScreen::Search => handle_search_key(app, key),
         SsmScreen::Help => handle_help_key(app, key),
+        SsmScreen::Update => handle_update_key(app, key),
         SsmScreen::ConfirmDelete => handle_confirm_key(app, key),
         SsmScreen::TagPick => handle_tag_pick_key(app, key),
     }
@@ -1214,6 +1379,8 @@ fn persist_config(app: &SsmApp) -> anyhow::Result<()> {
         theme: app.theme.clone(),
         probe: app.probe_enabled,
         biometric_unlock: app.biometric,
+        update_check: app.update_check,
+        update_frequency: app.update_frequency,
     })
 }
 
@@ -1318,6 +1485,10 @@ fn handle_list_key(app: &mut SsmApp, key: KeyEvent) {
         }
         KeyCode::Char('s') => {
             app.menu = Some(WhichKey::Settings);
+            app.flash = None;
+        }
+        KeyCode::Char('U') => {
+            app.screen = SsmScreen::Update;
             app.flash = None;
         }
         _ => {
@@ -1463,6 +1634,34 @@ fn handle_help_key(app: &mut SsmApp, key: KeyEvent) {
     match key.code {
         KeyCode::Char('q') | KeyCode::Esc => {
             app.screen = SsmScreen::List;
+        }
+        _ => {}
+    }
+}
+
+fn handle_update_key(app: &mut SsmApp, key: KeyEvent) {
+    match key.code {
+        // Don't let the user leave mid-download — the swap thread is still live.
+        KeyCode::Char('q') | KeyCode::Esc if !app.update_applying => {
+            app.screen = SsmScreen::List;
+        }
+        // Apply the pending update (self-managed installs only; no-op otherwise).
+        KeyCode::Char('a')
+            if app.update_info.is_some()
+                && app.install_source == InstallSource::SelfManaged
+                && !app.update_applying
+                && !app.update_done =>
+        {
+            app.start_update_apply();
+        }
+        // Manual re-check, bypassing the throttle (frequency 0 == always due).
+        KeyCode::Char('r')
+            if !app.update_applying
+                && app.update_check_rx.is_none()
+                && app.install_source == InstallSource::SelfManaged =>
+        {
+            app.update_info = None;
+            app.update_check_rx = Some(update::spawn_check(0));
         }
         _ => {}
     }
@@ -1646,6 +1845,8 @@ mod tests {
             theme: "auto".to_string(),
             probe: false,
             biometric_unlock: false,
+            update_check: false,
+            update_frequency: 1440,
         })
     }
 

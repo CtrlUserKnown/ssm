@@ -28,6 +28,12 @@ toml       = "0.8"
 # OS keychain (macOS: Security framework, Linux: secret-service)
 keyring    = { version = "3", features = ["apple-native", "sync-secret-service"] }
 
+# Self-update: HTTP client (pure-Rust rustls TLS, no OpenSSL) + tarball extract.
+ureq       = { version = "2", default-features = false, features = ["tls", "json"] }
+flate2     = "1"
+tar        = "0.4"
+sha2       = "0.10"
+
 # Error handling
 anyhow     = "1"
 

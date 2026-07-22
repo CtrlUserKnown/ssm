@@ -15,7 +15,7 @@ use ssm::storage::keychain_available;
 use ssm::tui::run_ssm;
 
 #[derive(Parser)]
-#[command(name = "ssm", version, about = "SSH session manager")]
+#[command(name = "ssm", version = env!("SSM_VERSION"), about = "SSH session manager")]
 struct Cli {
     /// Connect directly: user@host[:port]
     #[arg(short = 'c', value_name = "USER@HOST")]

@@ -1,12 +1,13 @@
 name: build
 
-# Produces release binaries for macOS and Linux on native runners. Run it
-# manually (workflow_dispatch) or by pushing a version tag like `v0.1.0`, which
-# also attaches the artifacts to a GitHub Release.
+# Produces the Linux release binaries and attaches them to a GitHub Release. Run
+# it manually (workflow_dispatch) or by pushing a version tag like `v0.1.0`.
 #
-# macOS binaries can't be cross-built from Linux (they need Apple's SDK and
-# Security.framework, which `keyring`'s apple-native backend links against), so
-# each target is built on its own native runner.
+# macOS is deliberately NOT built here. Without an Apple Developer account we
+# can't notarize in CI, and the stable self-signed identity that keeps biometric
+# unlock working lives only in the maintainer's local keychain. So the two
+# darwin arches are built + signed locally and uploaded to the same Release with
+# `scripts/release-macos.sh` (see the "Releasing" section of the README).
 
 on:
   workflow_dispatch:
@@ -28,10 +29,7 @@ jobs:
             target: x86_64-unknown-linux-gnu
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
-          - os: macos-13          # Intel
-            target: x86_64-apple-darwin
-          - os: macos-14          # Apple Silicon
-            target: aarch64-apple-darwin
+          # macOS targets are built locally — see scripts/release-macos.sh.
 
     steps:
       - name: Checkout
@@ -55,6 +53,11 @@ jobs:
           sudo apt-get install -y --no-install-recommends libdbus-1-dev pkg-config
 
       - name: Build release binary
+        env:
+          # Bake the pushed tag into the binary so `ssm --version` and the
+          # self-updater's version check are correct even on a shallow checkout.
+          # Empty on non-tag (manual) runs, so build.rs falls back to git describe.
+          SSM_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
         run: cargo build --release --locked --target ${{ matrix.target }}
 
       - name: Package

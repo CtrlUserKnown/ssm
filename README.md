@@ -93,6 +93,7 @@ ssm --import /path/to/ssh_config
 | `T` | Filter by tag (group view); `Esc` clears the filter |
 | `s` | Open settings menu (herdr, probe, biometric, theme) |
 | `u` | Reload sessions from disk |
+| `U` | Check for / apply ssm updates |
 | `Space` | Open which-key menu (delete, yank, tag filter, import, settings) |
 | `?` | Toggle help screen |
 | `q` | Quit |
@@ -115,6 +116,22 @@ use_herdr = true
 theme = "auto"
 probe = true             # background reachability probing + latency in the list
 biometric_unlock = false # require a biometric check before revealing a password
+update_check = true      # periodically check GitHub Releases for a newer ssm
+update_frequency = 1440  # minutes between update checks (1440 = daily)
+```
+
+### Updating
+
+ssm is a standalone binary, so it updates itself: on launch it checks the GitHub
+Releases API (throttled by `update_frequency`) and shows `▲ update available` in
+the list when a newer version exists. Press `U` to open the update view, then `a`
+to download and swap the binary in place. Restart ssm to run the new version.
+
+Installs managed by a package manager (e.g. Homebrew) skip self-update and tell
+you to update through that manager instead. For a first install:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/CtrlUserKnown/ssm/main/install.sh | sh
 ```
 
 ## Tags, Jump Hosts & Reachability
@@ -190,6 +207,34 @@ Cycle through themes live from the TUI via `Space` → Settings → Theme. Avail
 - `gruvbox`
 - `nord`
 - `tokyo-night`
+
+## Releasing
+
+Releases are split: **GitHub Actions builds the Linux binaries; macOS is built
+and signed locally.** There's no Apple Developer account, so CI can't notarize,
+and the stable self-signed identity that keeps [biometric unlock](#biometric-unlock-optional)
+working lives only in the maintainer's keychain — so the macOS arches are built
+on a Mac and uploaded to the same Release.
+
+```sh
+# 1. bump Cargo.toml version + CHANGELOG, commit, tag, push.
+git commit -am "chore(release): vX.Y.Z"
+git tag -a vX.Y.Z -m "ssm vX.Y.Z"
+git push origin main --follow-tags     # → CI builds & attaches the Linux tarballs
+
+# 2. on your Mac, build/sign/upload both darwin arches to the same Release.
+scripts/release-macos.sh vX.Y.Z        # x86_64 + aarch64, signed with ssm-codesign
+```
+
+The two steps are order-independent — whichever runs second just adds its assets
+to the Release. One Apple Silicon Mac produces both macOS arches
+(`rustup target add x86_64-apple-darwin`; Xcode ships both SDKs). Requires the
+`gh` CLI (authenticated) and the `ssm-codesign` identity from `scripts/sign-macos.sh`.
+
+**On notarization:** self-signed (not notarized) binaries launch fine on the two
+install paths that matter — `install.sh` (`curl | sh`) and the in-app self-updater
+— because neither sets the macOS quarantine bit (and the updater strips it
+anyway). Only a `.tar.gz` downloaded through a *browser* would be Gatekeeper-gated.
 
 ## License
 

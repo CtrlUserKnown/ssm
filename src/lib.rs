@@ -12,6 +12,7 @@ pub mod security;
 pub mod ssh_config;
 pub mod storage;
 pub mod tui;
+pub mod update;
 
 /// Shared ratatui chrome + theme, copied from the dots `tui-core` crate so ssm
 /// stands alone with no cross-repo dependency.
